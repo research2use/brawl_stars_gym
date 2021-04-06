@@ -1,28 +1,38 @@
 import time
+from pathlib import Path
 
 import cv2
 import numpy as np
-from game_control.games.executable_game import ExecutableGame
 from game_control.input_controller import KeyboardEvent, KeyboardEvents, KeyboardKey
 from game_control.limiter import Limiter
+from game_control.sprite import Sprite
+
+from brawl_stars_gym.ldplayer import LDPlayer
 
 
-class BrawlStars(ExecutableGame):
+class BrawlStars(LDPlayer):
+    BRAWL_STARS_DIR = Path("brawl_stars")
+
     def __init__(self, ldplayer_executable_filepath, fps=2, **kwargs):
         """
         Args:
+            ldplayer_executable_filepath (string): Executable of LDPlayer
             fps (int/tuple): Requested number of steps performed per second.
                 Will pause in step() to lower number of actions per second.
                 Will not pause when fps is too fast for step to keep up.
                 Requested fps can be an int or a tuple (indicating a random
                 range to choose from, with the top value excluded).
         """
-        super().__init__(
-            ldplayer_executable_filepath,
-            window_name="LDPlayer",
-            width=960,
-            height=540,
-            **kwargs
+        # Need fixed size window for region definitions
+        super().__init__(ldplayer_executable_filepath, width=960, height=540, **kwargs)
+
+        self.sprites.update(
+            Sprite.discover_sprites(
+                Path(__file__).parent
+                / self.DATA_DIR
+                / self.BRAWL_STARS_DIR
+                / self.SPRITE_DIR
+            )
         )
 
         self._actions = (
@@ -35,12 +45,74 @@ class BrawlStars(ExecutableGame):
             KeyboardKey.KEY_R,  # Temp nothing
         )
 
+        # self._actions = (
+        #     (
+        #         "MOVEMENT", (
+        #             ("MOVE UP", (KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_W)),
+        #             ("MOVE LEFT", (KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_A)),
+        #             ("MOVE DOWN", (KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_S)),
+        #             ("MOVE RIGHT", (KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_D))
+        #         )
+        #     ),
+        #     (
+        #         "SHOOTING", (
+        #             ("SHOOT", (KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_E)),
+        #             ("SHOOT SUPER", (KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_F)),
+        #             ("DON'T SHOOT", ())
+        #         )
+        #     )
+        # )
+
+        # self._actions = {
+        #     "MOVEMENT": {
+        #         "MOVE UP": [
+        #             KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_W)
+        #         ],
+        #         "MOVE LEFT": [
+        #             KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_A)
+        #         ],
+        #         "MOVE DOWN": [
+        #             KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_S)
+        #         ],
+        #         "MOVE RIGHT": [
+        #             KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_D)
+        #         ],
+        #         # "MOVE TOP-LEFT": [
+        #         #     KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_W),
+        #         #     KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_A)
+        #         # ],
+        #         # "MOVE TOP-RIGHT": [
+        #         #     KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_W),
+        #         #     KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_D)
+        #         # ],
+        #         # "MOVE DOWN-LEFT": [
+        #         #     KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_S),
+        #         #     KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_A)
+        #         # ],
+        #         # "MOVE DOWN-RIGHT": [
+        #         #     KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_S),
+        #         #     KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_D)
+        #         # ],
+        #         "DON'T MOVE": []
+        #     },
+        #     "SHOOTING": {
+        #         "SHOOT": [
+        #             KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_E)
+        #         ],
+        #         "SHOOT SUPER": [
+        #             KeyboardEvent(KeyboardEvents.DOWN, KeyboardKey.KEY_F)
+        #         ],
+        #         "DON'T SHOOT": []
+        #     }
+        # }
+
         # top, left, bottom, right
         self._regions = {
             "GAME_SCREEN": (28, 8, 540, 908),
+            "BUTTON_BRAWL_STARS": (103, 315, 185, 384),
             "BUTTON_EXIT": (476, 497, 522, 566),
             "BUTTON_TRY": (483, 41, 525, 237),
-            "BUTTON_PLAY": (345, 539, 384, 688),
+            "BUTTON_PLAY": (459, 686, 516, 886),
             "REWARD_TRY_DAMAGE_PER_SECOND": (67, 848, 89, 900),
         }
 
@@ -52,10 +124,29 @@ class BrawlStars(ExecutableGame):
         """Starts Brawl Stars app in LDPlayer; returns when it is started.
 
         Returns:
-            Frame: First frame when app has started
+            Frame: First frame when started (or failed).
+
+        Raises:
+            RuntimeError: when app could not be started
         """
-        print("starting Brawl Stars")
-        return self.grab_frame()
+        sprite = self.sprites["SPRITE_BUTTON_BRAWL_STARS"]
+        region = self.regions["BUTTON_BRAWL_STARS"]
+        found, frame, _ = self._wait_for_sprite(
+            sprite, region=region, msg="Waiting Brawl Stars"
+        )
+        if not found:
+            raise RuntimeError("Could not find sprite", sprite.name, "in time")
+        self.input_controller.click_screen_region(region)
+
+        sprite = self.sprites["SPRITE_BUTTON_PLAY"]
+        region = self.regions["BUTTON_PLAY"]
+        found, frame, _ = self._wait_for_sprite(
+            sprite, region=region, msg="Waiting Brawl Stars"
+        )
+        if not found:
+            raise RuntimeError("Could not find sprite", sprite.name, "in time")
+
+        return frame
 
     def stop_app(self):
         """Stops Brawl Stars app; returns when in main screen of LDPlayer.
