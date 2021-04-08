@@ -144,12 +144,6 @@ class BrawlStars(LDPlayer):
             sprite, region=region, msg="Waiting for Brawl Stars ..."
         )
         if not found:
-            from game_control.utilities import extract_roi_from_image
-
-            cv2.imwrite("C:\\Temp\\frame.png", frame.img)
-            roi = extract_roi_from_image(frame.img, region)
-            cv2.imwrite("C:\\Temp\\roi.png", roi)
-            cv2.imwrite("C:\\Temp\\sprite.png", sprite.image_data[..., 0])
             raise RuntimeError("Could not find sprite", sprite.name, "in time")
 
         return frame
