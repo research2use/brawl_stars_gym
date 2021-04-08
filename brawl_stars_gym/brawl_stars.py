@@ -26,7 +26,7 @@ class BrawlStars(LDPlayer):
         # Need fixed size window for region definitions
         super().__init__(ldplayer_executable_filepath, width=960, height=540, **kwargs)
 
-        self.sprites.update(
+        self._sprites.update(
             Sprite.discover_sprites(
                 Path(__file__).parent
                 / self.DATA_DIR
@@ -107,14 +107,14 @@ class BrawlStars(LDPlayer):
         # }
 
         # top, left, bottom, right
-        self._regions = {
-            "GAME_SCREEN": (28, 8, 540, 908),
-            "BUTTON_BRAWL_STARS": (103, 315, 185, 384),
-            "BUTTON_EXIT": (476, 497, 522, 566),
-            "BUTTON_TRY": (483, 41, 525, 237),
-            "BUTTON_PLAY": (459, 686, 516, 886),
-            "REWARD_TRY_DAMAGE_PER_SECOND": (67, 848, 89, 900),
-        }
+        self._regions.update(
+            {
+                "BUTTON_BRAWL_STARS": (103, 315, 185, 384),
+                "BUTTON_BRAWLERS": (301, 28, 337, 92),
+                "BUTTON_BACK": (34, 13, 84, 91),
+                "GAME_SCREEN": (28, 8, 540, 908),
+            }
+        )
 
         self._limiter = Limiter(fps=fps)
 
@@ -132,18 +132,24 @@ class BrawlStars(LDPlayer):
         sprite = self.sprites["SPRITE_BUTTON_BRAWL_STARS"]
         region = self.regions["BUTTON_BRAWL_STARS"]
         found, frame, _ = self._wait_for_sprite(
-            sprite, region=region, msg="Waiting Brawl Stars"
+            sprite, region=region, msg="Waiting for LDPlayer ..."
         )
         if not found:
             raise RuntimeError("Could not find sprite", sprite.name, "in time")
         self.input_controller.click_screen_region(region)
 
-        sprite = self.sprites["SPRITE_BUTTON_PLAY"]
-        region = self.regions["BUTTON_PLAY"]
+        sprite = self.sprites["SPRITE_BUTTON_BRAWLERS"]
+        region = self.regions["BUTTON_BRAWLERS"]
         found, frame, _ = self._wait_for_sprite(
-            sprite, region=region, msg="Waiting Brawl Stars"
+            sprite, region=region, msg="Waiting for Brawl Stars ..."
         )
         if not found:
+            from game_control.utilities import extract_roi_from_image
+
+            cv2.imwrite("C:\\Temp\\frame.png", frame.img)
+            roi = extract_roi_from_image(frame.img, region)
+            cv2.imwrite("C:\\Temp\\roi.png", roi)
+            cv2.imwrite("C:\\Temp\\sprite.png", sprite.image_data[..., 0])
             raise RuntimeError("Could not find sprite", sprite.name, "in time")
 
         return frame
@@ -172,10 +178,6 @@ class BrawlStars(LDPlayer):
     def actions(self):
         return self._actions
 
-    @property
-    def regions(self):
-        return self._regions
-
     def observation(self, frame):
         """Cut out the region of interest of the actual game from the full frame.
 
@@ -189,17 +191,6 @@ class BrawlStars(LDPlayer):
         roi = frame.img[region[0] : region[2], region[1] : region[3]]
         return roi
         # return cv2.resize(roi, self.observation_dimensions())
-
-    def reset(self):
-        """Restarts a Brawl Stars event; returns when event is restarted.
-            Generic for each event.
-
-        Returns:
-            Frame: First frame when event has started
-        """
-        frame = self.stop_event()
-        frame = self.start_event()
-        return self.observation(frame)
 
     def step(self, action):
         """Step function to be wrapped in OpenIA gym environment (GameEnv).
