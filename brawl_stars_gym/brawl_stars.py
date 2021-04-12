@@ -1,4 +1,5 @@
 import time
+from abc import ABC, abstractmethod
 from pathlib import Path
 
 import cv2
@@ -144,12 +145,6 @@ class BrawlStars(LDPlayer):
             sprite, region=region, msg="Waiting for Brawl Stars ..."
         )
         if not found:
-            from game_control.utilities import extract_roi_from_image
-
-            cv2.imwrite("C:\\Temp\\frame.png", frame.img)
-            roi = extract_roi_from_image(frame.img, region)
-            cv2.imwrite("C:\\Temp\\roi.png", roi)
-            cv2.imwrite("C:\\Temp\\sprite.png", sprite.image_data[..., 0])
             raise RuntimeError("Could not find sprite", sprite.name, "in time")
 
         return frame
@@ -192,6 +187,50 @@ class BrawlStars(LDPlayer):
         return roi
         # return cv2.resize(roi, self.observation_dimensions())
 
+    @abstractmethod
+    def reset(self):
+        """Resets the environment to its initial state.
+        Specifically for Brawl Stars it stops and starts and event
+
+        Abstract method that needs to be implemented in derived class.
+        Wrapped by OpenIA gym environment (GameEnv).
+
+        Returns:
+            Frame: First frame when event has started
+
+        """
+
+    @abstractmethod
+    def reward(self, frame):
+        """Returns the reward of the previously performed action that resulted in the given Frame.
+
+        Abstract method that needs to be implemented in derived class.
+        Used by step function that is wrapped in OpenIA gym environment.
+
+        Args:
+            frame (Frame): the resulting frame of the previously performed action.
+
+        Returns:
+            Number: The reward.
+
+        """
+        pass
+
+    @abstractmethod
+    def done(self, frame):
+        """Returns if the episode has finshed.
+
+        Abstract method that needs to be implemented in derived class.
+        Used by step function that is wrapped in OpenIA gym environment.
+
+        Args:
+            frame (Frame): the resulting frame of the previously performed action.
+
+        Returns:
+            Bool: True when episode has finished; False otherwise.
+        """
+        pass
+
     def step(self, action):
         """Step function to be wrapped in OpenIA gym environment (GameEnv).
             Take action, obtain new observation, determine reward and if done.
@@ -232,6 +271,5 @@ class BrawlStars(LDPlayer):
             "step_duration": step_duration,
             "paused_duration": paused_duration,
         }
-        print(info)
 
         return next_obs, reward, done, info
