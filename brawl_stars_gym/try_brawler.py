@@ -1,7 +1,12 @@
 from datetime import datetime
 from pathlib import Path
+from re import sub
 
+import cv2
+import numpy as np
+import pytesseract
 from game_control.sprite import Sprite
+from game_control.utilities import extract_roi_from_image
 
 from brawl_stars_gym.brawl_stars import BrawlStars
 
@@ -119,10 +124,83 @@ class TryBrawler(BrawlStars):
 
         return self.observation(frame)
 
+    @staticmethod
+    def _preprocess_text_image(img):
+        """Converts image to a binary image where text is black on a white background.
+
+        Args:
+            img (np.ndarray): Image with reward text in BGR format;
+                typically the region of interest of the full frame that contains the reward.
+
+        Returns:
+            np.ndarray: Preprocessed image with black reward text on white background.
+
+        """
+        text_color_bgr = np.array([255, 136, 136])
+        text_color_bgr_dev = np.array([15] * 3)
+
+        img = cv2.resize(img, (0, 0), fx=5, fy=5)
+        img = cv2.inRange(
+            img,
+            text_color_bgr - text_color_bgr_dev,
+            text_color_bgr + text_color_bgr_dev,
+        )
+        img = cv2.bitwise_not(img)
+        img = cv2.blur(img, (2, 2))
+
+        return img
+
+    @staticmethod
+    def damage_per_second(roi):
+        """Extracts and returns the number in the given region of interest image.
+        This number represents the damage per second that is displayed in this event.
+
+        Args:
+            roi (np.ndarray): The extracted region of interest of the full game frame
+                that contains only the numbers to be extracted.
+
+        Returns:
+            Int: The extracted number representing the inflicted damage per second.
+
+        """
+        roi = TryBrawler._preprocess_text_image(roi)
+        custom_config = r"--oem 1 --psm 6 outputbase digits"
+        reward = pytesseract.image_to_string(roi, config=custom_config)
+        reward = sub(r"\D", "", reward)
+
+        return 0 if not reward else int(reward)
+
     def reward(self, frame):
-        return 42
+        """Returns the reward of the previously performed action that resulted in the given Frame.
+
+        The reward is defined as the total accumulated damage inflicted to enemies.
+        This is approximated by the "damage per second" that is displayed in the top right corner
+        of the game screen. Not perfect, but probably correlates nicely with the actual total
+        damage and is far easier to extract than the the accumlated lost hitpoints of enemies.
+
+        Args:
+            frame (Frame): the resulting frame of the previously performed action.
+
+        Returns:
+            Number: The reward.
+
+        """
+        reward_roi = self.regions["REWARD_TRY_DAMAGE_PER_SECOND"]
+        region = extract_roi_from_image(frame.img, reward_roi)
+
+        return self.damage_per_second(region)
 
     def done(self, frame):
+        """Returns if the episode has finshed, when its time has passed.
+
+        Args:
+            frame (Frame): the resulting frame of the previously performed action.
+                Not used in this specific event, but required by generic interface.
+
+        Returns:
+            Bool: True when episode_duration_in_seconds that was given to constructor have passed;
+                False otherwise.
+        """
         current_episode_duration = datetime.utcnow() - self._started_at
         return (
             current_episode_duration.total_seconds()
